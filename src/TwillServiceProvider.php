@@ -200,7 +200,7 @@ class TwillServiceProvider extends ServiceProvider
     private function publishMigration($migration)
     {
         if (!class_exists($migration)) {
-            $timestamp = date('Y_m_d_His', time());
+            $timestamp = date('Y_m_d_', time());
             $this->publishes([
                 __DIR__ . '/../migrations/' . snake_case($migration) . '.php' => database_path('migrations/' . $timestamp . '_' . snake_case($migration) . '.php'),
             ], 'migrations');
