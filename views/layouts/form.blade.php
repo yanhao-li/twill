@@ -9,6 +9,8 @@
     $titleFormKey = $titleFormKey ?? 'title';
     $customForm = $customForm ?? false;
     $controlLanguagesPublication = $controlLanguagesPublication ?? true;
+    $users = app()->make('A17\Twill\Repositories\UserRepository')->published()->where('is_superadmin', false)->get();
+    $groups = app()->make('A17\Twill\Repositories\GroupRepository')->get();
 @endphp
 
 @section('content')
@@ -62,6 +64,46 @@
                                 @yield('contentFields')
                             </a17-fieldset>
                         @endunless
+
+                        @if($showPermissionFieldset ?? null)
+                            @can('manage-item', $item)
+                                <a17-fieldset title="User Permissions" id="permissions">
+                                    @foreach($users as $user)
+                                        @formField('select', [
+                                            'name' => 'user_' . $user->id . '_permission',
+                                            'label' => $user->name,
+                                            'unpack' => true,
+                                            'options' => [
+                                                [
+                                                    'value' => '',
+                                                    'label' => 'None'
+                                                ],
+                                                [
+                                                    'value' => 'view-item',
+                                                    'label' => 'View'
+                                                ],
+                                                [
+                                                    'value' => 'edit-item',
+                                                    'label' => 'Edit'
+                                                ],
+                                                [
+                                                    'value' => 'manage-item',
+                                                    'label' => 'Manage'
+                                                ],
+                                            ]
+                                        ])
+                                    @endforeach
+                                </a17-fieldset>
+                                <a17-fieldset title="Group Permissions" id="permissions">
+                                    @foreach($groups as $group)
+                                        @formField('checkbox', [
+                                            'name' => $group->id . '_group_authorized',
+                                            'label' => $group->name
+                                        ])
+                                    @endforeach
+                                </a17-fieldset>
+                            @endcan
+                        @endif
 
                         @yield('fieldsets')
                     </section>
@@ -188,4 +230,31 @@
     <script src="{{ mix('/assets/admin/js/manifest.js') }}"></script>
     <script src="{{ mix('/assets/admin/js/vendor.js') }}"></script>
     <script src="{{ mix('/assets/admin/js/main-form.js') }}"></script>
+
+    <script>
+        const groupUserMapping = {!! isset($groupUserMapping) ? json_encode($groupUserMapping) : '[]' !!};
+        window.vm.$store.subscribe((mutation, state) => {
+            if (mutation.type === 'updateFormField' && mutation.payload.name.endsWith('group_authorized')) {
+                const groupId = mutation.payload.name.replace('_group_authorized', '');
+                const checked = mutation.payload.value;
+                if (!isNaN(groupId)) {
+                    const users = groupUserMapping[groupId];
+                    users.forEach(function (userId) {
+                        // If the user's permission is <= view, it will be updated
+                        const currentPermission = state['form']['fields'].find(function(e) {
+                            return e.name == `user_${userId}_permission`
+                        }).value;
+                        if (currentPermission === '' || currentPermission === 'view-item') {
+                            const field = {
+                                name: `user_${userId}_permission`,
+                                value: checked ? 'view-item' : ''
+                            };
+                            window.vm.$store.commit('updateFormField', field)
+                        }
+                    })
+                }
+            }
+        })
+    </script>
 @endprepend
+

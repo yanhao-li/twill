@@ -11,7 +11,7 @@ trait HandleRepeaters
     public function updateRepeaterMany($object, $fields, $relation, $keepExisting = true, $model = null)
     {
         $relationFields = $fields['repeaters'][$relation] ?? [];
-        $relationRepository = $this->getModelRepository($relation, $model);
+        $relationRepository = getModelRepository($relation, $model);
 
         if (!$keepExisting) {
             $object->$relation()->each(function ($repeaterElement) {
@@ -33,7 +33,7 @@ trait HandleRepeaters
 
         $relationFields = $fields['repeaters'][$repeaterName] ?? [];
 
-        $relationRepository = $this->getModelRepository($relation, $model);
+        $relationRepository = getModelRepository($relation, $model);
 
         // if no relation field submitted, soft deletes all associated rows
         if (!$relationFields) {
@@ -85,7 +85,7 @@ trait HandleRepeaters
         $repeatersBrowsers = [];
         $repeatersMedias = [];
         $repeatersFiles = [];
-        $relationRepository = $this->getModelRepository($relation, $model);
+        $relationRepository = getModelRepository($relation, $model);
         $repeatersConfig = config('twill.block_editor.repeaters');
 
         foreach ($object->$relation as $relationItem) {

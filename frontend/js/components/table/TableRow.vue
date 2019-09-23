@@ -4,14 +4,15 @@
       <template v-if="isSpecificColumn(col)">
         <component :is="currentComponent(col.name)"
                    v-bind="currentComponentProps(col)"
+                   :row="row"
                    @update="tableCellUpdate"
                    @editInPlace="editInPlace"/>
       </template>
-      <a17-table-cell-generic v-else v-bind="currentComponentProps(col)" @editInPlace="editInPlace" @update="tableCellUpdate"/>
+      <a17-table-cell-generic v-else v-bind="currentComponentProps(col)" :row="row" @editInPlace="editInPlace" @update="tableCellUpdate"/>
     </td>
     <td class="tablecell tablecell--spacer">&nbsp;</td>
     <td class="tablecell tablecell--sticky">
-      <a17-table-cell-actions v-bind="currentComponentProps()" @editInPlace="editInPlace" @update="tableCellUpdate" @restoreRow=" restoreRow" @deleteRow="deleteRow"/>
+      <a17-table-cell-actions v-if="row.edit" v-bind="currentComponentProps()" @editInPlace="editInPlace" @update="tableCellUpdate" @restoreRow=" restoreRow" @deleteRow="deleteRow"/>
     </td>
   </tr>
 </template>
@@ -93,6 +94,16 @@
 
     &:first-child {
       padding-left: 20px;
+    }
+  }
+
+  /* Thumb */
+  .tablecell--thumb {
+    width: 1px;
+
+    @include breakpoint(xsmall) { // no thumbnail on smaller screens
+      padding-left: 0;
+      padding-right: 0;
     }
   }
 

@@ -51,6 +51,7 @@ if (!function_exists('isActiveNavigation')) {
      */
     function isActiveNavigation($navigationElement, $navigationKey, $activeNavigationKey)
     {
+
         $keysAreMatching = isset($activeNavigationKey) && $navigationKey === $activeNavigationKey;
 
         if ($keysAreMatching) {

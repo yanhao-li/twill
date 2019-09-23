@@ -223,6 +223,7 @@ class TwillServiceProvider extends ServiceProvider
             'CreateMediasTables' => 'media-library',
             'CreateFeaturesTable' => 'buckets',
             'CreateSettingsTable' => 'settings',
+            'SupportPermission' => 'permission'
         ];
 
         // The updatesMigrations array must include new migrations that should
@@ -328,6 +329,7 @@ class TwillServiceProvider extends ServiceProvider
     private function requireHelpers()
     {
         require_once __DIR__ . '/Helpers/routes_helpers.php';
+        require_once __DIR__ . '/Helpers/modules_helpers.php';
         require_once __DIR__ . '/Helpers/i18n_helpers.php';
         require_once __DIR__ . '/Helpers/media_library_helpers.php';
         require_once __DIR__ . '/Helpers/frontend_helpers.php';

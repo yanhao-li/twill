@@ -3,10 +3,12 @@
 namespace A17\Twill\Http\Controllers\Admin;
 
 use A17\Twill\Models\User;
+use Carbon\Carbon;
 use Illuminate\Auth\AuthManager;
 use Illuminate\Config\Repository as Config;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\View\Factory as ViewFactory;
@@ -119,7 +121,18 @@ class LoginController extends Controller
             return $this->redirector->to(route('admin.login-2fa.form'));
         }
 
-        return $this->redirector->intended($this->redirectTo);
+        $user->last_login_at = Carbon::now();
+        $user->save();
+
+        if ($user->require_new_password) {
+            $this->logout($request);
+            $token = Password::broker('twill_users')->getRepository()->create($user);
+            return redirect(route('admin.password.reset.form', $token))->withErrors([
+                'error' => 'Your password needs to be reset before login',
+            ]);
+        }
+
+        return redirect()->intended($this->redirectTo);
     }
 
     /**

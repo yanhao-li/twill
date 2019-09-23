@@ -2,103 +2,145 @@
 
 namespace A17\Twill;
 
-use A17\Twill\Models\Enums\UserRole;
-use A17\Twill\Models\User;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use A17\Twill\Models\Permission;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    const SUPERADMIN = 'SUPERADMIN';
 
     protected function authorize($user, $callback)
     {
-        if (!$user->isPublished()) {
-            return false;
+        if ($user->is_superadmin) {
+            return true;
         }
 
-        if ($user->isSuperAdmin()) {
-            return true;
+        if (!$user->published) {
+            return false;
         }
 
         return $callback($user);
     }
 
-    protected function userHasRole($user, $roles)
-    {
-        return in_array($user->role_value, $roles);
-    }
-
     public function boot()
     {
-        Gate::define('list', function ($user) {
+        /***
+         *
+         *    Global permissions
+         *
+         ***/
+
+        Gate::define('edit-settings', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::VIEWONLY, UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->role->permissions()->global()->where('name', 'edit-settings')->exists();
             });
         });
 
-        Gate::define('edit', function ($user) {
+        Gate::define('edit-users', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->role->permissions()->global()->where('name', 'edit-users')->exists();
             });
         });
 
-        Gate::define('reorder', function ($user) {
+        Gate::define('edit-user-role', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->role->permissions()->global()->where('name', 'edit-user-role')->exists();
             });
         });
 
-        Gate::define('publish', function ($user) {
+        Gate::define('edit-user-groups', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->role->permissions()->global()->where('name', 'edit-user-groups')->exists();
             });
         });
 
-        Gate::define('feature', function ($user) {
+        Gate::define('access-user-management', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->can('edit-users') || $user->can('edit-user-role') || $user->can('edit-user-groups');
             });
         });
 
-        Gate::define('delete', function ($user) {
+        Gate::define('manage-modules', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
+                return $user->role->permissions()->global()->where('name', 'manage-modules')->exists();
             });
         });
 
-        Gate::define('upload', function ($user) {
+        Gate::define('access-media-library', function ($user) {
             return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::PUBLISHER, UserRole::ADMIN]);
-            });
-        });
-
-        Gate::define('manage-users', function ($user) {
-            return $this->authorize($user, function ($user) {
-                return $this->userHasRole($user, [UserRole::ADMIN]);
-            });
-        });
-
-        // As an admin, I can edit users, except superadmins
-        // As a non-admin, I can edit myself only
-        Gate::define('edit-user', function ($user, $editedUser = null) {
-            return $this->authorize($user, function ($user) use ($editedUser) {
-                $editedUserObject = User::find($editedUser);
-                return ($this->userHasRole($user, [UserRole::ADMIN]) || $user->id == $editedUser)
-                    && ($editedUserObject ? $editedUserObject->role !== self::SUPERADMIN : true);
-            });
-        });
-
-        Gate::define('publish-user', function ($user) {
-            return $this->authorize($user, function ($user) {
-                $editedUserObject = User::find(request('id'));
-                return $this->userHasRole($user, [UserRole::ADMIN]) && ($editedUserObject ? $user->id !== $editedUserObject->id && $editedUserObject->role !== self::SUPERADMIN : false);
+                return $user->role->permissions()->global()->where('name', 'access-media-library')->exists();
             });
         });
 
         Gate::define('impersonate', function ($user) {
-            return $user->role === self::SUPERADMIN;
+            return $this->authorize($user, function ($user) {
+                return $user->is_superadmin;
+            });
         });
 
+        /***
+         *
+         *    Module permissions
+         *
+         ***/
+
+        Gate::define('access-module-list', function ($user, $moduleName) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('view-module', $moduleName)
+                || $user->permissions()->ofModuleName($moduleName)->exists();
+            });
+        });
+
+        // The gate of accessing module list page,
+        Gate::define('view-module', function ($user, $moduleName) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('edit-module', $moduleName)
+                || $user->role->permissions()->ofModuleName($moduleName)->where('name', 'view-module')->exists();
+            });
+        });
+
+        Gate::define('edit-module', function ($user, $moduleName) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('manage-module', $moduleName)
+                || $user->role->permissions()->module()->ofModuleName($moduleName)->where('name', 'manage-module')->exists();
+            });
+        });
+
+        Gate::define('manage-module', function ($user, $moduleName) {
+            return $this->authorize($user, function ($user) {
+                if (!isPermissionableModule($moduleName)) {
+                    return true;
+                }
+                return $user->can('manage-modules')
+                || $user->role->permissions()->module()->ofModuleName($moduleName)->where('name', 'manage-module')->exists();
+            });
+        });
+
+        /***
+         *
+         *    Module item permissions
+         *
+         ***/
+
+        Gate::define('view-item', function ($user, $item) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('edit-item', $item)
+                || $user->permissions()->ofItem($item)->where('name', 'view-item')->exists();
+            });
+        });
+
+        Gate::define('edit-item', function ($user, $item) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('manage-item', $item)
+                || $user->permissions()->ofItem($item)->where('name', 'edit-item')->exists();
+            });
+        });
+
+        Gate::define('manage-item', function ($user, $item) {
+            return $this->authorize($user, function ($user) {
+                return $user->can('manage-module', getModuleNameByModel(get_class($item)))
+                || $user->permissions()->ofItem($item)->where('name', 'manage-item')->exists();
+            });
+        });
     }
 }

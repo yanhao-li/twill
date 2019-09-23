@@ -31,18 +31,18 @@ class UserRequest extends Request
                     return [
                         'name' => 'required',
                         'email' => 'required|email|unique:' . config('twill.users_table', 'twill_users') . ',email',
-                        'role' => 'required|not_in:SUPERADMIN',
+                        'role_id' => 'required',
                     ];
                 }
             case 'PUT':
                 {
                     return [
                         'name' => 'required',
-                        'role' => 'not_in:SUPERADMIN',
-                        'email' => 'required|email|unique:' . config('twill.users_table', 'twill_users') . ',email,' . $this->get('user'),
+                        'role_id' => 'required',
+                        'email' => 'required|email|unique:' . config('twill.users_table', 'twill_users') . ',email,' . $this->user,
                         'verify-code' => function ($attribute, $value, $fail) {
                             $user = Auth::guard('twill_users')->user();
-                            $with2faSettings = config('twill.enabled.users-2fa') && $user->id == $this->get('user');
+                            $with2faSettings = config('twill.enabled.users-2fa') && $user->id == $this->user;
 
                             if ($with2faSettings) {
                                 $userIsEnabling = $this->get('google_2fa_enabled') && !$user->google_2fa_enabled;

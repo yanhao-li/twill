@@ -5,6 +5,10 @@ use Illuminate\Support\Collection;
 
 if (config('twill.enabled.users-management')) {
     Route::module('users', ['except' => ['sort', 'feature']]);
+    Route::module('groups', ['except' => ['sort', 'feature', 'search']]);
+    Route::module('roles', ['except' => ['sort', 'feature']]);
+    Route::name('users.resend.registrationEmail')->get('users/{user}/registration-email', 'UserController@resendRegistrationEmail');
+    Route::get('group/search', ['as' => 'groups.search', 'uses' => 'GroupController@search']);
 }
 
 if (config('twill.enabled.media-library')) {
@@ -39,7 +43,7 @@ if (config('twill.enabled.buckets')) {
     })->toArray();
 
     foreach ($bucketsRoutes as $bucketSectionKey => $routePrefix) {
-        Route::group(['prefix' => str_replace(".","/",$routePrefix), 'as' => $routePrefix . '.'], function () use ($bucketSectionKey) {
+        Route::group(['prefix' => str_replace(".", "/", $routePrefix), 'as' => $routePrefix . '.'], function () use ($bucketSectionKey) {
             Route::get($bucketSectionKey, ['as' => $bucketSectionKey, 'uses' => 'FeaturedController@index']);
             Route::group(['prefix' => $bucketSectionKey, 'as' => $bucketSectionKey . '.'], function () {
                 Route::post('save', ['as' => 'save', 'uses' => 'FeaturedController@save']);

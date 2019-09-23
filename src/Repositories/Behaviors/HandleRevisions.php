@@ -94,7 +94,7 @@ trait HandleRevisions
     {
         $relationFields = $fields['repeaters'][$relationship] ?? [];
 
-        $relationRepository = $this->getModelRepository($relationship, $model);
+        $relationRepository = getModelRepository($relationship, $model);
 
         $repeaterCollection = Collection::make();
 

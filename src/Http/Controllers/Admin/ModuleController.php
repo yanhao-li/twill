@@ -2,6 +2,7 @@
 
 namespace A17\Twill\Http\Controllers\Admin;
 
+use A17\Twill\Models\Group;
 use A17\Twill\Helpers\FlashLevel;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
@@ -51,10 +52,10 @@ abstract class ModuleController extends Controller
      */
     protected $repository;
 
-    /**
-     * Options of the index view.
-     *
-     * @var array
+    protected $user;
+
+    /*
+     * Options of the index view
      */
     protected $defaultIndexOptions = [
         'create' => true,
@@ -177,14 +178,16 @@ abstract class ModuleController extends Controller
         $this->app = $app;
         $this->request = $request;
 
-        $this->setMiddlewarePermission();
-
         $this->modelName = $this->getModelName();
         $this->routePrefix = $this->getRoutePrefix();
         $this->namespace = $this->getNamespace();
         $this->repository = $this->getRepository();
         $this->viewPrefix = $this->getViewPrefix();
         $this->modelTitle = $this->getModelTitle();
+        $this->middleware(function ($request, $next) {
+            $this->user = auth('twill_users')->user();
+            return $next($request);
+        });
 
         /*
          * Default filters for the index view
@@ -223,23 +226,12 @@ abstract class ModuleController extends Controller
     }
 
     /**
-     * @return void
-     */
-    protected function setMiddlewarePermission()
-    {
-        $this->middleware('can:list', ['only' => ['index', 'show']]);
-        $this->middleware('can:edit', ['only' => ['store', 'edit', 'update']]);
-        $this->middleware('can:publish', ['only' => ['publish', 'feature', 'bulkPublish', 'bulkFeature']]);
-        $this->middleware('can:reorder', ['only' => ['reorder']]);
-        $this->middleware('can:delete', ['only' => ['destroy', 'bulkDelete', 'restore', 'bulkRestore', 'restoreRevision']]);
-    }
-
-    /**
      * @param int|null $parentModuleId
      * @return array|\Illuminate\View\View
      */
     public function index($parentModuleId = null)
     {
+        $this->authorize('access-module-list', $this->moduleName);
         $this->submodule = isset($parentModuleId);
         $this->submoduleParentId = $parentModuleId;
 
@@ -327,6 +319,9 @@ abstract class ModuleController extends Controller
         $this->submodule = isset($submoduleId);
         $this->submoduleParentId = $id;
 
+        $item = $this->repository->getById($submoduleId ?? $id);
+        $this->authorize('view-item', $item);
+
         if ($this->getIndexOption('editInModal')) {
             return $this->request->ajax()
             ? Response::json($this->modalFormData($submodule ?? $id))
@@ -357,6 +352,9 @@ abstract class ModuleController extends Controller
         $this->submoduleParentId = $id;
 
         $item = $this->repository->getById($submoduleId ?? $id);
+
+        $this->authorize('edit-item', $item);
+
         $input = $this->request->all();
 
         if (isset($input['cmsSaveType']) && $input['cmsSaveType'] === 'cancel') {
@@ -707,6 +705,9 @@ abstract class ModuleController extends Controller
      */
     protected function getIndexItems($scopes = [], $forcePagination = false)
     {
+        if (isPermissionableModule($this->moduleName)) {
+            $scopes = $scopes + ['accessible' => true];
+        }
         return $this->transformIndexItems($this->repository->get(
             $this->indexWith,
             $scopes,
@@ -752,11 +753,9 @@ abstract class ModuleController extends Controller
             }
 
             unset($columnsData[$this->titleColumnKey]);
-
             $itemIsTrashed = method_exists($item, 'trashed') && $item->trashed();
-            $itemCanDelete = $this->getIndexOption('delete') && ($item->canDelete ?? true);
-            $canEdit = $this->getIndexOption('edit');
-
+            $itemCanDelete = $this->getIndexOption('delete', $item) && ($item->canDelete ?? true);
+            $canEdit = $this->getIndexOption('edit', $item);
             return array_replace([
                 'id' => $item->id,
                 'name' => $name,
@@ -824,6 +823,7 @@ abstract class ModuleController extends Controller
                 : Str::singular($column['title']))) . '</a>';
         } else {
             $field = $column['field'];
+            debug($field);
             $value = $item->$field;
         }
 
@@ -848,6 +848,7 @@ abstract class ModuleController extends Controller
         $tableColumns = [];
         $visibleColumns = $this->request->get('columns') ?? false;
 
+
         if (isset(Arr::first($this->indexColumns)['thumb'])
             && Arr::first($this->indexColumns)['thumb']
         ) {
@@ -857,7 +858,10 @@ abstract class ModuleController extends Controller
                 'visible' => $visibleColumns ? in_array('thumbnail', $visibleColumns) : true,
                 'optional' => true,
                 'sortable' => false,
-            ]);
+            ] + (isset(array_first($this->indexColumns)['variation'])
+                    ? ['variation' => array_first($this->indexColumns)['variation']]
+                    : [])
+            );
             array_shift($this->indexColumns);
         }
 
@@ -1000,32 +1004,37 @@ abstract class ModuleController extends Controller
      * @param string $option
      * @return bool
      */
-    protected function getIndexOption($option)
+    protected function getIndexOption($option, $item = null)
     {
-        return once(function () use ($option) {
+        return once(function () use ($option, $item) {
             $customOptionNamesMapping = [
                 'store' => 'create',
             ];
-
             $option = array_key_exists($option, $customOptionNamesMapping) ? $customOptionNamesMapping[$option] : $option;
-
             $authorizableOptions = [
-                'create' => 'edit',
-                'edit' => 'edit',
-                'publish' => 'publish',
-                'feature' => 'feature',
-                'reorder' => 'reorder',
-                'delete' => 'delete',
-                'restore' => 'delete',
-                'bulkPublish' => 'publish',
-                'bulkRestore' => 'delete',
-                'bulkFeature' => 'feature',
-                'bulkDelete' => 'delete',
-                'bulkEdit' => 'edit',
-                'editInModal' => 'edit',
+                'list' => 'access-module-list',
+                'create' => 'edit-module',
+                'edit' => 'view-item',
+                'publish' => 'edit-item',
+                'feature' => 'edit-item',
+                'reorder' => 'edit-module',
+                'delete' => 'edit-item',
+                'restore' => 'edit-item',
+                'bulkPublish' => 'edit-module',
+                'bulkRestore' => 'edit-module',
+                'bulkFeature' => 'edit-module',
+                'bulkDelete' => 'edit-module',
+                'bulkEdit' => 'edit-module',
+                'editInModal' => 'edit-module',
             ];
-
-            $authorized = array_key_exists($option, $authorizableOptions) ? Auth::guard('twill_users')->user()->can($authorizableOptions[$option]) : true;
+            $authorized = false;
+            if (array_key_exists($option, $authorizableOptions)) {
+                if (Str::endsWith($authorizableOptions[$option], '-module')) {
+                    $authorized = $this->user->can($authorizableOptions[$option], $this->moduleName);
+                } elseif (Str::endsWith($authorizableOptions[$option], '-item') && $item) {
+                    $authorized = $this->user->can($authorizableOptions[$option], $item);
+                }
+            }
             return ($this->indexOptions[$option] ?? $this->defaultIndexOptions[$option] ?? false) && $authorized;
         });
     }
@@ -1202,6 +1211,8 @@ abstract class ModuleController extends Controller
             'editor' => $this->moduleHas('revisions') && $this->moduleHas('blocks') && !$this->disableEditor,
             'blockPreviewUrl' => URL::route('admin.blocks.preview'),
             'revisions' => $this->moduleHas('revisions') ? $item->revisionsArray() : null,
+            'groupUserMapping' => $this->getGroupUserMapping(),
+            'showPermissionFieldset' => $this->getShowPermissionFieldset($item),
         ] + (Route::has($previewRouteName) ? [
             'previewUrl' => moduleRoute($this->moduleName, $this->routePrefix, 'preview', $item->id),
         ] : [])
@@ -1488,6 +1499,14 @@ abstract class ModuleController extends Controller
         ]);
     }
 
+    protected function getGroupUserMapping()
+    {
+        return Group::with('users')->get()
+            ->mapWithKeys(function($group) {
+                return [ $group->id => $group->users()->pluck('id')->toArray() ];
+            })->toArray();
+    }
+
     /**
      * @param array $input
      * @return void
@@ -1495,5 +1514,11 @@ abstract class ModuleController extends Controller
     protected function fireEvent($input = [])
     {
         fireCmsEvent('cms-module.saved', $input);
+    }
+
+    protected function getShowPermissionFieldset($item)
+    {
+        $permissionModuleName = isPermissionableModule(getModuleNameByModel($item));
+        return $permissionModuleName && !strpos($permissionModuleName, '.');
     }
 }

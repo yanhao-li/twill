@@ -2,12 +2,16 @@
 
 namespace A17\Twill\Http\Controllers\Admin;
 
-use A17\Twill\Models\Enums\UserRole;
+use A17\Twill\Models\Permission;
+use A17\Twill\Models\Role;
+use A17\Twill\Models\User;
+use A17\Twill\Models\Group;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Config\Repository as Config;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Password;
 use PragmaRX\Google2FAQRCode\Google2FA;
 
 class UserController extends ModuleController
@@ -68,6 +72,12 @@ class UserController extends ModuleController
         'name' => [
             'title' => 'Name',
             'field' => 'name',
+            'sort' => true,
+        ],
+        'last_login' => [
+            'title' => 'Last Login',
+            'field' => 'last_login_column_value',
+            'sort' => true
         ],
         'email' => [
             'title' => 'Email',
@@ -78,7 +88,7 @@ class UserController extends ModuleController
             'title' => 'Role',
             'field' => 'role_value',
             'sort' => true,
-            'sortKey' => 'role',
+            'sortKey' => 'role_id',
         ],
     ];
 
@@ -99,26 +109,21 @@ class UserController extends ModuleController
     public function __construct(Application $app, Request $request, AuthFactory $authFactory, Config $config)
     {
         parent::__construct($app, $request);
-
+        $this->middleware('can:edit-users', ['except' => ['edit', 'update']]);
         $this->authFactory = $authFactory;
         $this->config = $config;
-
-        $this->removeMiddleware('can:edit');
-        $this->removeMiddleware('can:delete');
-        $this->removeMiddleware('can:publish');
-        $this->middleware('can:manage-users', ['only' => ['index']]);
-        $this->middleware('can:edit-user,user', ['only' => ['store', 'edit', 'update', 'destroy', 'bulkDelete', 'restore', 'bulkRestore']]);
-        $this->middleware('can:publish-user', ['only' => ['publish']]);
 
         if ($this->config->get('twill.enabled.users-image')) {
             $this->indexColumns = [
                 'image' => [
                     'title' => 'Image',
                     'thumb' => true,
+                    'variation' => 'rounded',
                     'variant' => [
                         'role' => 'profile',
                         'crop' => 'default',
-                    ],
+                        'shape' => 'rounded'
+                    ]
                 ],
             ] + $this->indexColumns;
         }
@@ -131,13 +136,26 @@ class UserController extends ModuleController
     protected function indexData($request)
     {
         return [
-            'defaultFilterSlug' => 'published',
-            'create' => $this->getIndexOption('create') && $this->authFactory->guard('twill_users')->user()->can('manage-users'),
-            'roleList' => Collection::make(UserRole::toArray()),
-            'single_primary_nav' => [
+            'create' => $this->getIndexOption('create') && $this->user->can('edit-users'),
+            'roleList' => Role::published()->get()->map(function ($role) {
+                return ['value' => $role->id, 'label' => $role->name];
+            })->toArray(),
+            'primary_navigation' => [
                 'users' => [
                     'title' => 'Users',
                     'module' => true,
+                    'active' => true,
+                    'can' => 'edit-users',
+                ],
+                'roles' => [
+                    'title' => 'Roles',
+                    'module' => true,
+                    'can' => 'edit-user-role',
+                ],
+                'groups' => [
+                    'title' => 'Groups',
+                    'module' => true,
+                    'can' => 'edit-user-groups',
                 ],
             ],
             'customPublishedLabel' => 'Enabled',
@@ -174,17 +192,34 @@ class UserController extends ModuleController
         }
 
         return [
-            'roleList' => Collection::make(UserRole::toArray()),
-            'single_primary_nav' => [
+            'roleList' => Role::published()->get()->map(function ($role) {
+                return ['value' => $role->id, 'label' => $role->name];
+            })->toArray(),
+            'primary_navigation' => [
                 'users' => [
                     'title' => 'Users',
                     'module' => true,
+                    'active' => true,
+                    'can' => 'edit-users',
+                ],
+                'roles' => [
+                    'title' => 'Roles',
+                    'module' => true,
+                    'can' => 'edit-user-role',
+                ],
+                'groups' => [
+                    'title' => 'Groups',
+                    'module' => true,
+                    'can' => 'edit-user-groups',
                 ],
             ],
             'customPublishedLabel' => 'Enabled',
             'customDraftLabel' => 'Disabled',
+            'permissionModules' => Permission::permissionableParentModuleItems(),
+            'groupPermissionMapping' => $this->getGroupPermissionMapping(),
             'with2faSettings' => $with2faSettings,
             'qrCode' => $qrCode ?? null,
+            'groupOptions' => $this->getGroups()
         ];
     }
 
@@ -208,7 +243,7 @@ class UserController extends ModuleController
         array_push($statusFilters, [
             'name' => 'Active',
             'slug' => 'published',
-            'number' => $this->repository->getCountByStatusSlug('published'),
+            'number' => $this->repository->getCountByStatusSlug('published', [['is_superadmin', false]]),
         ], [
             'name' => 'Disabled',
             'slug' => 'draft',
@@ -230,10 +265,10 @@ class UserController extends ModuleController
      * @param string $option
      * @return bool
      */
-    protected function getIndexOption($option)
+    protected function getIndexOption($option, $item = null)
     {
-        if (in_array($option, ['publish', 'delete', 'restore'])) {
-            return $this->authFactory->guard('twill_users')->user()->can('manage-users');
+        if (in_array($option, ['publish', 'bulkEdit', 'create'])) {
+            return $this->authFactory->guard('twill_users')->user()->can('edit-users');
         }
 
         return parent::getIndexOption($option);
@@ -245,11 +280,48 @@ class UserController extends ModuleController
      */
     protected function indexItemData($item)
     {
+        $canEdit = $this->user->can('edit-users');
 
-        $user = $this->authFactory->guard('twill_users')->user();
-        $canEdit = $user->can('manage-users') || $user->id === $item->id;
-        return [
-            'edit' => $canEdit ? $this->getModuleRoute($item->id, 'edit') : null,
-        ];
+        return ['edit' => $canEdit ? $this->getModuleRoute($item->id, 'edit') : null];
+    }
+
+    public function edit($id, $submoduleId = null)
+    {
+        if ($id !== (string) $this->user->id) {
+            $this->authorize('edit-users');
+        }
+
+        return parent::edit($id, $submoduleId);
+    }
+
+    public function update($id, $submoduleId = null)
+    {
+        if ($id !== (string) $this->user->id) {
+            $this->authorize('edit-users');
+        }
+
+        return parent::update($id, $submoduleId);
+    }
+
+    public function resendRegistrationEmail(User $user)
+    {
+        $user->sendWelcomeNotification(
+            Password::broker('twill_users')->getRepository()->create($user)
+        );
+        return redirect()->route('admin.users.edit', ['user' => $user])->with('status', 'Registration email has been sent to the user!');
+    }
+
+    private function getGroupPermissionMapping()
+    {
+        return Group::with('permissions')->get()
+        ->mapWithKeys(function($group) {
+            return [ $group->id => $group->permissions ];
+        })->toArray();
+    }
+
+    private function getGroups()
+    {
+        // Forget first one because it's the "Everyone" group and we don't want to show it inside admin.
+        return Group::with('permissions')->get()->pluck('name','id')->forget(1);
     }
 }

@@ -5,6 +5,7 @@ namespace A17\Twill\Repositories;
 use A17\Twill\Models\Behaviors\HasMedias;
 use A17\Twill\Models\Behaviors\Sortable;
 use A17\Twill\Repositories\Behaviors\HandleDates;
+use A17\Twill\Repositories\Behaviors\HandlePermissions;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\App;
@@ -16,7 +17,7 @@ use PDO;
 
 abstract class ModuleRepository
 {
-    use HandleDates;
+    use HandleDates, HandlePermissions;
 
     /**
      * @var \A17\Twill\Models\Model
@@ -66,17 +67,19 @@ abstract class ModuleRepository
      */
     public function getCountByStatusSlug($slug, $scope = [])
     {
-        $this->countScope = $scope;
-
+        $query = $this->model->where($scope);
+        if (isPermissionableModule(getModuleNameByModel($this->model))) {
+            $query = $query->accessible();
+        }
         switch ($slug) {
             case 'all':
-                return $this->getCountForAll();
+                return $query->count();
             case 'published':
-                return $this->getCountForPublished();
+                return $query->published()->count();
             case 'draft':
-                return $this->getCountForDraft();
+                return $query->draft()->count();
             case 'trash':
-                return $this->getCountForTrash();
+                return $query->onlyTrashed()->count();
         }
 
         foreach (class_uses_recursive(get_called_class()) as $trait) {

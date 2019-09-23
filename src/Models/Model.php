@@ -3,6 +3,8 @@
 namespace A17\Twill\Models;
 
 use A17\Twill\Models\Behaviors\HasPresenter;
+use A17\Twill\Models\Permission;
+use Auth;
 use Carbon\Carbon;
 use Cartalyst\Tags\TaggableInterface;
 use Cartalyst\Tags\TaggableTrait;
@@ -18,6 +20,37 @@ abstract class Model extends BaseModel implements TaggableInterface
     public function scopePublished($query)
     {
         return $query->wherePublished(true);
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+    }
+
+    public function scopeAccessible($query)
+    {
+        $model = get_class($query->getModel());
+        $moduleName = isPermissionableModule(getModuleNameByModel($model));
+        if ( $moduleName && !Auth::user()->is_superadmin) {
+            // Get all permissions the logged in user has regards to the model.
+            $allPermissions = Auth::user()->allPermissions();
+            $allModelPermissions = (clone $allPermissions)->ofModel($model);
+            // If the user has any module permissions, or global manage all modules permissions, all items will be return
+            if ($allModelPermissions->module()->whereIn('name', Permission::available('module'))->exists()
+                || (clone $allPermissions)->global()->where('name', 'manage-modules')->exists()) {
+                return $query;
+            }
+
+            // If the module is submodule, skip the scope.
+            if(strpos($moduleName, '.')) {
+                return $query;
+            };
+
+            $authorizedItemsIds = $allPermissions->moduleItem()->pluck('permissionable_id');
+            return $query->whereIn('id', $authorizedItemsIds);
+        }
+        return $query;
     }
 
     public function scopePublishedInListings($query)

@@ -2,11 +2,14 @@
 
 namespace A17\Twill\Models;
 
+use A17\Twill\Models\Role;
+use A17\Twill\Models\Group;
 use A17\Twill\Models\Behaviors\HasMedias;
+use A17\Twill\Models\Behaviors\HasPermissions;
 use A17\Twill\Models\Behaviors\HasPresenter;
-use A17\Twill\Models\Enums\UserRole;
 use A17\Twill\Notifications\Reset as ResetNotification;
 use A17\Twill\Notifications\Welcome as WelcomeNotification;
+use A17\Twill\Notifications\TemporaryPassword as TemporaryPasswordNotification;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\Access\Authorizable;
@@ -16,23 +19,29 @@ use Illuminate\Support\Facades\Session;
 
 class User extends AuthenticatableContract
 {
-    use Authenticatable, Authorizable, HasMedias, Notifiable, HasPresenter, SoftDeletes;
+    use Authenticatable, Authorizable, HasMedias, Notifiable, HasPresenter, HasPermissions, SoftDeletes;
 
     public $timestamps = true;
+
+    protected $casts = [
+        'is_superadmin' => 'boolean',
+    ];
 
     protected $fillable = [
         'email',
         'name',
-        'role',
         'published',
         'title',
         'description',
+        'role_id',
         'google_2fa_enabled',
         'google_2fa_secret',
     ];
 
     protected $dates = [
         'deleted_at',
+        'registered_at',
+        'last_login_at'
     ];
 
     protected $hidden = ['password', 'remember_token', 'google_2fa_secret'];
@@ -63,15 +72,10 @@ class User extends AuthenticatableContract
 
     public function getRoleValueAttribute()
     {
-        if (!empty($this->role)) {
-            if ($this->role == 'SUPERADMIN') {
-                return "SUPERADMIN";
-            }
-
-            return UserRole::{$this->role}()->getValue();
+        if ($this->is_superadmin) {
+            return 'SUPERADMIN';
         }
-
-        return null;
+        return $this->role ? $this->role->name : '';
     }
 
     public function getCanDeleteAttribute()
@@ -146,5 +150,35 @@ class User extends AuthenticatableContract
     public function isPublished()
     {
         return (bool) $this->published;
+    }
+
+    public function sendTemporaryPasswordNotification($password)
+    {
+        $this->notify(new TemporaryPasswordNotification($password));
+    }
+
+    public function groups()
+    {
+        return $this->belongsToMany(Group::class, 'group_twill_user', 'twill_user_id', 'group_id');
+    }
+
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    public function allPermissions()
+    {
+            $permissions = Permission::whereHas('users', function ($query) {
+                $query->where('id', $this->id);
+            })->orWhereHas('roles', function ($query) {
+                $query->where('id', $this->role->id);
+            });
+            return $permissions;
+    }
+
+    public function getLastLoginColumnValueAttribute()
+    {
+        return $this->last_login_at ? $this->last_login_at->format('d M Y, H:i') : 'Pending activation';
     }
 }
