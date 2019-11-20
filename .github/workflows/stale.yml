@@ -18,15 +18,17 @@ jobs:
           OPERATIONS_PER_RUN: 5000
           STALE_ISSUE_MESSAGE: |
             Hi!
-            Since this issue has been inactivity for 2 months, I'm going to tag this issue with `stale`, and it will be closed next month.
-            If we missed this issue or if you want to keep it open, please reply here. You can also add the label "not stale" to keep this issue open!
+            Since there is no activities for at least 3 months, this issue is going to be marked as `stale?` automatically.
+            The resources of the Twill team is limited, and so we are asking for your help.
+            If we missed this issue or if you want to keep it open, please reply here. 
+            You can also add the label "not stale" to keep this issue open!
+            Thank you for your contribution.
           CLOSE_MESSAGE: |
             Hello again!
-            It's been one month since this issue was tagged `stale`, this issue is going to be closed.
+            It has been another month since this issue was tagged `stale?`, and it will be closed automatically.
             Please feel free to reopen this issue or create a new one if you need anything else.
+            Thank you!
           EXEMPT_ISSUE_LABELS: |
             not stale
-            important
+            imact: high
             good first issue
-            no triage
-            status: confirmed
