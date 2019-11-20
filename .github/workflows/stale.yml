@@ -12,8 +12,8 @@ jobs:
         uses: yanhao-li/stale@v2.0.0
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DAYS_BEFORE_STALE: 1
-          DAYS_BEFORE_CLOSE: 1
+          DAYS_BEFORE_STALE: 0
+          DAYS_BEFORE_CLOSE: 0
           DRY_RUN: false
           OPERATIONS_PER_RUN: 5000
           STALE_ISSUE_MESSAGE: |
