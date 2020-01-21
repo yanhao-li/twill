@@ -5,6 +5,7 @@ namespace A17\Twill\Repositories;
 use A17\Twill\Models\Behaviors\HasMedias;
 use A17\Twill\Models\Behaviors\Sortable;
 use A17\Twill\Repositories\Behaviors\HandleDates;
+use A17\Twill\Repositories\Behaviors\HandleBrowsers;
 use A17\Twill\Repositories\Behaviors\HandleFieldsGroups;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -17,8 +18,8 @@ use PDO;
 
 abstract class ModuleRepository
 {
-    use HandleDates, HandleFieldsGroups;
-
+    use HandleDates, HandleBrowsers, HandleFieldsGroups;
+  
     /**
      * @var \A17\Twill\Models\Model
      */
@@ -85,11 +86,9 @@ abstract class ModuleRepository
                 return $this->getCountForTrash();
         }
 
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'getCountByStatusSlug' . class_basename($trait))) {
-                if (($count = $this->$method($slug)) !== false) {
-                    return $count;
-                }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            if (($count = $this->$method($slug)) !== false) {
+                return $count;
             }
         }
 
@@ -471,10 +470,8 @@ abstract class ModuleRepository
     {
         $fields = $this->cleanupFields(null, $fields);
 
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'prepareFieldsBeforeCreate' . class_basename($trait))) {
-                $fields = $this->$method($fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $fields = $this->$method($fields);
         }
 
         return $fields;
@@ -489,10 +486,8 @@ abstract class ModuleRepository
     {
         $fields = $this->cleanupFields($object, $fields);
 
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'prepareFieldsBeforeSave' . class_basename($trait))) {
-                $fields = $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $fields = $this->$method($object, $fields);
         }
 
         return $fields;
@@ -505,10 +500,8 @@ abstract class ModuleRepository
      */
     public function afterUpdateBasic($object, $fields)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'afterUpdateBasic' . class_basename($trait))) {
-                $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($object, $fields);
         }
     }
 
@@ -519,10 +512,8 @@ abstract class ModuleRepository
      */
     public function beforeSave($object, $fields)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'beforeSave' . class_basename($trait))) {
-                $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($object, $fields);
         }
     }
 
@@ -533,10 +524,8 @@ abstract class ModuleRepository
      */
     public function afterSave($object, $fields)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'afterSave' . class_basename($trait))) {
-                $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($object, $fields);
         }
     }
 
@@ -546,10 +535,8 @@ abstract class ModuleRepository
      */
     public function afterDelete($object)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'afterDelete' . class_basename($trait))) {
-                $this->$method($object);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($object);
         }
     }
 
@@ -559,10 +546,8 @@ abstract class ModuleRepository
      */
     public function afterRestore($object)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'afterRestore' . class_basename($trait))) {
-                $this->$method($object);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($object);
         }
     }
 
@@ -573,10 +558,8 @@ abstract class ModuleRepository
      */
     public function hydrate($object, $fields)
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'hydrate' . class_basename($trait))) {
-                $object = $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $object = $this->$method($object, $fields);
         }
 
         return $object;
@@ -590,10 +573,8 @@ abstract class ModuleRepository
     {
         $fields = $object->attributesToArray();
 
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'getFormFields' . class_basename($trait))) {
-                $fields = $this->$method($object, $fields);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $fields = $this->$method($object, $fields);
         }
 
         return $fields;
@@ -608,10 +589,8 @@ abstract class ModuleRepository
     {
         $likeOperator = $this->getLikeOperator();
 
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'filter' . class_basename($trait))) {
-                $this->$method($query, $scopes);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($query, $scopes);
         }
 
         unset($scopes['search']);
@@ -647,10 +626,8 @@ abstract class ModuleRepository
      */
     public function order($query, array $orders = [])
     {
-        foreach (class_uses_recursive(get_called_class()) as $trait) {
-            if (method_exists(get_called_class(), $method = 'order' . class_basename($trait))) {
-                $this->$method($query, $orders);
-            }
+        foreach ($this->traitsMethods(__FUNCTION__) as $method) {
+            $this->$method($query, $orders);
         }
 
         foreach ($orders as $column => $direction) {
@@ -658,50 +635,6 @@ abstract class ModuleRepository
         }
 
         return $query;
-    }
-
-    /**
-     * @param \A17\Twill\Models\Model $object
-     * @param string $relation
-     * @param string|null $routePrefix
-     * @param string $titleKey
-     * @param string|null $moduleName
-     * @return array
-     */
-    public function getFormFieldsForBrowser($object, $relation, $routePrefix = null, $titleKey = 'title', $moduleName = null)
-    {
-        return $object->$relation->map(function ($relatedElement) use ($titleKey, $routePrefix, $relation, $moduleName) {
-            return [
-                'id' => $relatedElement->id,
-                'name' => $relatedElement->titleInBrowser ?? $relatedElement->$titleKey,
-                'edit' => moduleRoute($moduleName ?? $relation, $routePrefix ?? '', 'edit', $relatedElement->id),
-                'endpointType' => $relatedElement->getMorphClass(),
-            ] + (classHasTrait($relatedElement, HasMedias::class) ? [
-                'thumbnail' => $relatedElement->defaultCmsImage(['w' => 100, 'h' => 100]),
-            ] : []);
-        })->toArray();
-    }
-
-    /**
-     * @param \A17\Twill\Models\Model $object
-     * @param string $relation
-     * @return array
-     */
-    public function getFormFieldsForRelatedBrowser($object, $relation)
-    {
-        return $object->getRelated($relation)->map(function ($relatedElement) {
-            return ($relatedElement != null) ? [
-                'id' => $relatedElement->id,
-                'name' => $relatedElement->titleInBrowser ?? $relatedElement->title,
-                'endpointType' => $relatedElement->getMorphClass(),
-            ] + (($relatedElement->adminEditUrl ?? null) ? [] : [
-                'edit' => $relatedElement->adminEditUrl,
-            ]) + (classHasTrait($relatedElement, HasMedias::class) ? [
-                'thumbnail' => $relatedElement->defaultCmsImage(['w' => 100, 'h' => 100]),
-            ] : []) : [];
-        })->reject(function ($item) {
-            return empty($item);
-        })->values()->toArray();
     }
 
     /**
@@ -727,49 +660,6 @@ abstract class ModuleRepository
         } else {
             $object->$relationship()->delete();
         }
-    }
-
-    /**
-     * @param \A17\Twill\Models\Model $object
-     * @param array $fields
-     * @param string $relationship
-     * @param string $positionAttribute
-     * @return void
-     */
-    public function updateOrderedBelongsTomany($object, $fields, $relationship, $positionAttribute = 'position')
-    {
-        $fieldsHasElements = isset($fields['browsers'][$relationship]) && !empty($fields['browsers'][$relationship]);
-        $relatedElements = $fieldsHasElements ? $fields['browsers'][$relationship] : [];
-        $relatedElementsWithPosition = [];
-        $position = 1;
-        foreach ($relatedElements as $relatedElement) {
-            $relatedElementsWithPosition[$relatedElement['id']] = [$positionAttribute => $position++];
-        }
-
-        $object->$relationship()->sync($relatedElementsWithPosition);
-    }
-
-    /**
-     * @param \A17\Twill\Models\Model $object
-     * @param array $fields
-     * @param string $relationship
-     * @param string $positionAttribute
-     * @return void
-     */
-    public function updateBrowser($object, $fields, $relationship, $positionAttribute = 'position')
-    {
-        $this->updateOrderedBelongsTomany($object, $fields, $relationship, $positionAttribute);
-    }
-
-    /**
-     * @param mixed $object
-     * @param array $fields
-     * @param string $browserName
-     * @return void
-     */
-    public function updateRelatedBrowser($object, $fields, $browserName)
-    {
-        $object->sync($fields['browsers'][$browserName] ?? [], $browserName);
     }
 
     /**
@@ -887,6 +777,27 @@ abstract class ModuleRepository
         }
 
         return App::make(Config::get('twill.namespace') . "\\Repositories\\" . ucfirst($model) . "Repository");
+    }
+
+    /**
+     * @param string|null $method
+     * @return array
+     */
+    protected function traitsMethods(string $method = null)
+    {
+        $method = $method ?? debug_backtrace()[1]['function'];
+
+        $traits = array_values(class_uses_recursive(get_called_class()));
+
+        $uniqueTraits = array_unique(array_map('class_basename', $traits));
+
+        $methods = array_map(function (string $trait) use ($method) {
+            return $method . $trait;
+        }, $uniqueTraits);
+
+        return array_filter($methods, function (string $method) {
+            return method_exists(get_called_class(), $method);
+        });
     }
 
     /**
